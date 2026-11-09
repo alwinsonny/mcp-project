@@ -1,0 +1,7 @@
+# Everything in requirements.txt, plus testing and code-quality tools.
+-r requirements.txt
+pytest==9.1.1
+anyio==4.15.1
+hypothesis==6.168.1
+ruff==0.16.8
+mypy==2.3.1
