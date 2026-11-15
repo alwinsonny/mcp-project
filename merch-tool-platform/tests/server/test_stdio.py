@@ -1,0 +1,54 @@
+"""End-to-end: launch `python -m merch_platform.server` exactly as Claude Desktop does.
+
+This proves three things the in-memory tests cannot:
+* the module starts as a separate process and speaks MCP over stdin/stdout,
+* nothing pollutes stdout (a stray print would break the protocol here),
+* the real Postgres store answers through the server.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import os
+import sys
+
+import pytest
+from mcp import Client, StdioServerParameters
+from sqlalchemy.ext.asyncio import create_async_engine
+
+from merch_platform.seed.generator import SeedData
+from merch_platform.seed.load import load_seed
+
+pytestmark = [pytest.mark.anyio, pytest.mark.integration]
+
+
+@pytest.fixture
+def seeded_test_db(migrated_test_db: str, seed_data: SeedData) -> str:
+    async def load() -> None:
+        engine = create_async_engine(migrated_test_db)
+        await load_seed(engine, seed_data)
+        await engine.dispose()
+
+    asyncio.run(load())
+    return migrated_test_db
+
+
+async def test_server_runs_over_stdio_against_postgres(seeded_test_db: str) -> None:
+    params = StdioServerParameters(
+        command=sys.executable,
+        args=["-m", "merch_platform.server"],
+        env={**os.environ, "MERCH_DATABASE_URL": seeded_test_db},
+    )
+    async with Client(params) as client:
+        names = {tool.name for tool in (await client.list_tools()).tools}
+        assert names == {
+            "search_products",
+            "get_product",
+            "get_inventory_position",
+            "explain_price",
+        }
+
+        result = await client.call_tool("explain_price", {"sku": "TRAP-RULES-001"})
+        assert not result.is_error
+        assert result.structured_content is not None
+        assert result.structured_content["final_price"] == "13.00"

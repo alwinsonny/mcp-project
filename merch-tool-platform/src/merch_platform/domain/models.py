@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import ROUND_CEILING, ROUND_HALF_UP, Decimal
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -43,10 +43,37 @@ def min_price_for_margin(cost: Decimal, floor_pct: Decimal) -> Decimal:
     return (cost / (1 - floor_pct / HUNDRED)).quantize(TWO_PLACES, rounding=ROUND_CEILING)
 
 
-class DomainModel(BaseModel):
-    """Base for all domain models: immutable and strict about unknown fields."""
+# Pydantic describes Decimal fields with regexes that start with a lookahead "(?!...)",
+# for example ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$ (and a variant for "2 decimal places").
+# Some MCP clients, including the MCP Inspector, cannot evaluate lookaheads and reject
+# the whole result. We publish one simple, portable pattern instead. Money is always sent
+# as a string like "13.00" or "-18.75", so this pattern fits our data exactly.
+_PYDANTIC_DECIMAL_PREFIX = "^(?!^[-+.]*$)"
+_PORTABLE_DECIMAL_PATTERN = r"^-?\d+(\.\d+)?$"
 
-    model_config = ConfigDict(frozen=True, extra="forbid")
+
+def _portable_json_schema(schema: dict[str, Any]) -> None:
+    """Rewrite Decimal patterns anywhere in a model's JSON schema (runs on every model)."""
+
+    def walk(node: Any) -> None:
+        if isinstance(node, dict):
+            pattern = node.get("pattern")
+            if isinstance(pattern, str) and pattern.startswith(_PYDANTIC_DECIMAL_PREFIX):
+                node["pattern"] = _PORTABLE_DECIMAL_PATTERN
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item)
+
+    walk(schema)
+
+
+class DomainModel(BaseModel):
+    """Base for all domain models: immutable, strict about unknown fields, and with a
+    JSON schema every MCP client can evaluate."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", json_schema_extra=_portable_json_schema)
 
 
 # --------------------------------------------------------------------------- catalogue

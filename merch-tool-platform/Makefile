@@ -5,7 +5,7 @@ export
 # Every command uses the Python inside .venv, so you do not need to activate it first.
 PY := .venv/bin/python
 
-.PHONY: venv setup db-create migrate seed test test-fast format lint typecheck check
+.PHONY: venv setup db-create migrate seed serve inspect test test-fast format lint typecheck check
 
 venv:             ## create .venv and install all packages
 	test -d .venv || python3 -m venv .venv
@@ -27,6 +27,12 @@ migrate:
 
 seed:
 	$(PY) -m merch_platform.seed
+
+serve:            ## run the MCP server over stdio (it waits silently for a client)
+	$(PY) -m merch_platform.server
+
+inspect:          ## open the MCP Inspector in your browser, connected to this server
+	npx -y @modelcontextprotocol/inspector $(PY) -m merch_platform.server
 
 test-fast:        ## tests that need no database
 	$(PY) -m pytest -m "not integration"
