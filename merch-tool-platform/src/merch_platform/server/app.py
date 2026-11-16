@@ -7,6 +7,8 @@ Phase 2 built the server. Phase 3 made each tool a professional contract:
 * every tool carries `contract_version` and `risk_class` in its _meta,
 * tools/list carries a cache hint so clients stop re-fetching the catalogue.
 Phase 4 added resources (resources.py) and prompts with autocomplete (prompts.py).
+Phase 6 added a /health route and the request-state key setting, for running over HTTP
+(http.py). The tools themselves did not change: the same server runs over either transport.
 
 This module stays thin: each tool lets the SDK validate the arguments, calls a Phase 1
 service, and passes the result to `respond`. All business rules stay in the services.
@@ -32,9 +34,12 @@ from typing import Annotated, Any
 from mcp.server import MCPServer
 from mcp.server.caching import CacheableMethod, CacheHint
 from mcp.server.mcpserver import Context
+from mcp.server.request_state import RequestStateSecurity
 from mcp.types import CallToolResult, ToolAnnotations
 from pydantic import Field
 from sqlalchemy.ext.asyncio import create_async_engine
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 
 from merch_platform.adapters.postgres import PostgresStore
 from merch_platform.config import get_settings
@@ -53,7 +58,7 @@ from merch_platform.server.results import protocol_error, respond
 from merch_platform.services.container import Services, build_services
 
 SERVER_NAME = "merch-tool-platform"
-SERVER_VERSION = "0.4.0"  # project phase 4; clients see this in serverInfo
+SERVER_VERSION = "0.6.0"  # project phase 4; clients see this in serverInfo
 SERVER_INSTRUCTIONS = (
     "Read-only tools for a UK spa, bath and homewares shop's catalogue. All money is GBP. "
     "Start with search_products to find SKUs; the other tools need exact SKUs. "
@@ -123,8 +128,17 @@ Sku = Annotated[
 
 
 # ---------------------------------------------------------------- the server
-def create_server(services_factory: ServicesFactory = postgres_services) -> MCPServer:
-    """Build the server. Tests pass a factory that returns in-memory services."""
+def create_server(
+    services_factory: ServicesFactory = postgres_services,
+    *,
+    request_state_security: RequestStateSecurity | None = None,
+) -> MCPServer:
+    """Build the server. Tests pass a factory that returns in-memory services.
+
+    `request_state_security`: how confirmation round trips are sealed. None means a
+    random key held by this process only, which is right for stdio and one HTTP copy.
+    Several HTTP copies must share keys (see http.py).
+    """
 
     # Static resources and completions cannot receive Context (an SDK rule), so the
     # services are also kept here, filled in at start-up and cleared at shut-down.
@@ -150,6 +164,7 @@ def create_server(services_factory: ServicesFactory = postgres_services) -> MCPS
         instructions=SERVER_INSTRUCTIONS,
         lifespan=lifespan,
         cache_hints=CACHE_HINTS,
+        request_state_security=request_state_security,
     )
 
     def services(ctx: Context[AppContext]) -> Services:
@@ -271,6 +286,27 @@ def create_server(services_factory: ServicesFactory = postgres_services) -> MCPS
 
     register_resources(mcp, current_services)
     register_prompts(mcp, current_services)
+
+    # -------------------------------------------------------------- /health (HTTP only)
+    # Load balancers and hosting platforms call this to decide whether to send traffic
+    # here. "ok" means more than "the process is running": it read from the database.
+    # The SDK's custom_route() decorator has no type hints, hence the targeted ignore.
+    @mcp.custom_route("/health", methods=["GET"], include_in_schema=False)  # type: ignore[untyped-decorator]
+    async def health(_request: Request) -> JSONResponse:
+        try:
+            categories = await current_services().catalogue.taxonomy()
+        except Exception as err:  # not started yet, or the database is unreachable
+            return JSONResponse(
+                {"status": "unavailable", "reason": type(err).__name__}, status_code=503
+            )
+        return JSONResponse(
+            {
+                "status": "ok",
+                "server": f"{SERVER_NAME} {SERVER_VERSION}",
+                "top_level_categories": len(categories),
+            }
+        )
+
     return mcp
 
 

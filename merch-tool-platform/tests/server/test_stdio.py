@@ -8,29 +8,13 @@ This proves three things the in-memory tests cannot:
 
 from __future__ import annotations
 
-import asyncio
 import os
 import sys
 
 import pytest
 from mcp import Client, StdioServerParameters
-from sqlalchemy.ext.asyncio import create_async_engine
-
-from merch_platform.seed.generator import SeedData
-from merch_platform.seed.load import load_seed
 
 pytestmark = [pytest.mark.anyio, pytest.mark.integration]
-
-
-@pytest.fixture
-def seeded_test_db(migrated_test_db: str, seed_data: SeedData) -> str:
-    async def load() -> None:
-        engine = create_async_engine(migrated_test_db)
-        await load_seed(engine, seed_data)
-        await engine.dispose()
-
-    asyncio.run(load())
-    return migrated_test_db
 
 
 async def test_server_runs_over_stdio_against_postgres(seeded_test_db: str) -> None:

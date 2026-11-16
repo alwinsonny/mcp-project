@@ -5,7 +5,7 @@ export
 # Every command uses the Python inside .venv, so you do not need to activate it first.
 PY := .venv/bin/python
 
-.PHONY: venv setup db-create migrate seed serve inspect snapshot test test-fast format lint typecheck check
+.PHONY: venv setup db-create migrate seed serve inspect snapshot test test-fast format lint typecheck check serve-http cluster keygen inspect-http
 
 venv:             ## create .venv and install all packages
 	test -d .venv || python3 -m venv .venv
@@ -33,6 +33,18 @@ serve:            ## run the MCP server over stdio (it waits silently for a clie
 
 inspect:          ## open the MCP Inspector in your browser, connected to this server
 	npx -y @modelcontextprotocol/inspector $(PY) -m merch_platform.server
+
+serve-http:       ## run the MCP server over HTTP at http://127.0.0.1:8000/mcp (Phase 6)
+	$(PY) -m merch_platform.server.http
+
+cluster:          ## two server copies behind a round-robin balancer at :8080 (Phase 6)
+	$(PY) -m merch_platform.devtools.cluster
+
+keygen:           ## print a new secret for MERCH_REQUEST_STATE_KEYS
+	@$(PY) -c "import secrets; print(secrets.token_urlsafe(32))"
+
+inspect-http:     ## open the MCP Inspector, connected to the HTTP server (start it first)
+	npx -y @modelcontextprotocol/inspector --transport http --server-url http://127.0.0.1:8000/mcp
 
 snapshot:         ## accept the current tool catalogue as approved (review the git diff!)
 	UPDATE_SNAPSHOT=1 $(PY) -m pytest tests/server/test_catalogue_snapshot.py -q -rs
