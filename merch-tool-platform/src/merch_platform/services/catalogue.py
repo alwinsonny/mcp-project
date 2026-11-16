@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 from merch_platform.domain.commands import (
     PROTECTED_ATTRIBUTES,
     AttributeChangeLine,
@@ -16,7 +18,28 @@ from merch_platform.domain.commands import (
 from merch_platform.domain.errors import CategoryNotFound, NoChange, ProtectedAttribute, SkuNotFound
 from merch_platform.domain.models import AttributeValue, Category, margin_pct
 from merch_platform.domain.ports import CatalogueRepository, InventoryRepository, PricingRepository
-from merch_platform.services.checks import check_blast_radius, require_active, require_skus
+from merch_platform.services.checks import (
+    check_blast_radius,
+    preview,
+    require_active,
+    require_skus,
+)
+
+
+def unknown_category(unknown: Iterable[str], categories: list[Category]) -> CategoryNotFound:
+    """A CategoryNotFound the caller can recover from: details list every valid ID.
+
+    An AI agent usually cannot read resources by itself (the host app decides which
+    resources to load), so the valid IDs travel in the error. That way the very next
+    call can succeed.
+    """
+    valid = {c.id: c.name for c in sorted(categories, key=lambda c: c.id)}
+    return CategoryNotFound(
+        f"Unknown category ID(s): {preview(set(unknown))}.",
+        hint="Use one of the category IDs listed in details (sub-categories are included "
+        "automatically), or leave category_id empty.",
+        details={"valid_category_ids": valid},
+    )
 
 
 def descendants(categories: list[Category], root_id: str) -> set[str]:
@@ -52,10 +75,7 @@ class CatalogueService:
         if query.category_id is not None:
             categories = await self._catalogue.list_categories()
             if query.category_id not in {c.id for c in categories}:
-                raise CategoryNotFound(
-                    f"Category {query.category_id} does not exist.",
-                    hint="Read catalog://taxonomy for valid category IDs.",
-                )
+                raise unknown_category([query.category_id], categories)
             category_ids = descendants(categories, query.category_id)
 
         rows = await self._catalogue.search_products(query, category_ids)

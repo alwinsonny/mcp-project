@@ -52,3 +52,9 @@ async def test_server_runs_over_stdio_against_postgres(seeded_test_db: str) -> N
         assert not result.is_error
         assert result.structured_content is not None
         assert result.structured_content["final_price"] == "13.00"
+
+        # Phase 4: resources and prompts work in a real process against Postgres too.
+        taxonomy = await client.read_resource("catalog://taxonomy")
+        assert '"id":"C-110","name":"Bath towels"' in taxonomy.contents[0].text  # type: ignore[union-attr]
+        prompt = await client.get_prompt("weekly_margin_review", {"category_id": "C-110"})
+        assert "C-110 (Bath towels)" in prompt.messages[0].content.text  # type: ignore[union-attr]

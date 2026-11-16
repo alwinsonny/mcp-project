@@ -12,6 +12,7 @@ Checks, in order:
 
 from __future__ import annotations
 
+from datetime import date
 from decimal import ROUND_FLOOR, Decimal
 
 from merch_platform.domain.commands import (
@@ -21,7 +22,6 @@ from merch_platform.domain.commands import (
     WriteLimits,
 )
 from merch_platform.domain.errors import (
-    CategoryNotFound,
     InvalidDateRange,
     NoChange,
     PromotionBelowCost,
@@ -35,7 +35,7 @@ from merch_platform.domain.ports import (
     PromotionRepository,
 )
 from merch_platform.domain.pricing import explain_price
-from merch_platform.services.catalogue import descendants
+from merch_platform.services.catalogue import descendants, unknown_category
 from merch_platform.services.checks import check_blast_radius, preview, require_active, require_skus
 
 SAMPLE_SIZE = 20
@@ -63,10 +63,7 @@ class PromotionService:
             known = {c.id for c in categories}
             unknown = set(category_ids) - known
             if unknown:
-                raise CategoryNotFound(
-                    f"Unknown category IDs: {preview(unknown)}.",
-                    hint="Read catalog://taxonomy for valid category IDs.",
-                )
+                raise unknown_category(unknown, categories)
             expanded: set[str] = set()
             for cid in category_ids:
                 expanded |= descendants(categories, cid)
@@ -77,6 +74,27 @@ class PromotionService:
             require_active(products)
             scope |= set(skus)
         return scope
+
+    async def calendar(self, starts: date, ends: date) -> list[Promotion]:
+        """Every promotion running at any point between two dates (inclusive), by start date."""
+        if ends < starts:
+            raise InvalidDateRange(
+                f"ends {ends} is before starts {starts}.", hint="Swap the two dates."
+            )
+        found = await self._promotions.list_overlapping(starts, ends)
+        return sorted(found, key=lambda p: (p.starts, p.code))
+
+    async def overlaps(
+        self, category_ids: list[str], skus: list[str], starts: date, ends: date
+    ) -> list[tuple[Promotion, int]]:
+        """Promotions running in the date range, each with how many of the given scope's
+        SKUs it also covers. 0 shared SKUs means it overlaps in time only."""
+        scope = await self.resolve_scope(category_ids, skus)
+        report = []
+        for existing in await self.calendar(starts, ends):
+            shared = scope & await self.resolve_scope(existing.category_ids, existing.skus)
+            report.append((existing, len(shared)))
+        return report
 
     async def plan_promotion(
         self, request: CreatePromotionRequest, limits: WriteLimits

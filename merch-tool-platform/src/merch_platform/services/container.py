@@ -39,6 +39,7 @@ class Services:
     inventory: InventoryService
     promotions: PromotionService
     orders: OrderService
+    clock: Clock  # "today" for everything; tests pass a FixedClock
 
 
 def build_services(store: Store, clock: Clock | None = None) -> Services:
@@ -49,4 +50,5 @@ def build_services(store: Store, clock: Clock | None = None) -> Services:
         inventory=InventoryService(store, store),
         promotions=PromotionService(store, store, store, clock),
         orders=OrderService(store),
+        clock=clock,
     )

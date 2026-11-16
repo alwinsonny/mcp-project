@@ -1,0 +1,701 @@
+[
+  {
+    "_meta": {
+      "contract_version": "1",
+      "risk_class": "read"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Explain the price customers pay for a SKU on a date (default today): the base\nprice, each catalogue price rule that applied in order with the price before and\nafter, every rule that was skipped and why, and the final price and margin %. Use\nit when asked why something costs what it does, or what it will cost on a future\ndate. Rules run lowest priority number first; one marked 'stop further rules' ends\nthe calculation. Money in GBP.",
+    "inputSchema": {
+      "properties": {
+        "on": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Date to price on, YYYY-MM-DD, e.g. 2026-11-27. Default: today.",
+          "title": "On"
+        },
+        "sku": {
+          "description": "Exact SKU, case-sensitive, e.g. TW-00012. Find SKUs with search_products.",
+          "maxLength": 40,
+          "minLength": 3,
+          "title": "Sku",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sku"
+      ],
+      "title": "explain_priceArguments",
+      "type": "object"
+    },
+    "name": "explain_price",
+    "outputSchema": {
+      "$defs": {
+        "PriceStep": {
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "title": "Action",
+              "type": "string"
+            },
+            "price_after": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "pattern": "^-?\\d+(\\.\\d+)?$",
+                  "type": "string"
+                }
+              ],
+              "title": "Price After"
+            },
+            "price_before": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "pattern": "^-?\\d+(\\.\\d+)?$",
+                  "type": "string"
+                }
+              ],
+              "title": "Price Before"
+            },
+            "priority": {
+              "title": "Priority",
+              "type": "integer"
+            },
+            "rule_id": {
+              "title": "Rule Id",
+              "type": "string"
+            },
+            "rule_name": {
+              "title": "Rule Name",
+              "type": "string"
+            },
+            "stopped_further_rules": {
+              "title": "Stopped Further Rules",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "rule_id",
+            "rule_name",
+            "priority",
+            "action",
+            "price_before",
+            "price_after",
+            "stopped_further_rules"
+          ],
+          "title": "PriceStep",
+          "type": "object"
+        },
+        "SkippedRule": {
+          "additionalProperties": false,
+          "properties": {
+            "reason": {
+              "title": "Reason",
+              "type": "string"
+            },
+            "rule_id": {
+              "title": "Rule Id",
+              "type": "string"
+            },
+            "rule_name": {
+              "title": "Rule Name",
+              "type": "string"
+            }
+          },
+          "required": [
+            "rule_id",
+            "rule_name",
+            "reason"
+          ],
+          "title": "SkippedRule",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "applied": {
+          "items": {
+            "$ref": "#/$defs/PriceStep"
+          },
+          "title": "Applied",
+          "type": "array"
+        },
+        "base_price": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^-?\\d+(\\.\\d+)?$",
+              "type": "string"
+            }
+          ],
+          "title": "Base Price"
+        },
+        "cost": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^-?\\d+(\\.\\d+)?$",
+              "type": "string"
+            }
+          ],
+          "title": "Cost"
+        },
+        "final_margin_pct": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^-?\\d+(\\.\\d+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Final Margin Pct"
+        },
+        "final_price": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^-?\\d+(\\.\\d+)?$",
+              "type": "string"
+            }
+          ],
+          "title": "Final Price"
+        },
+        "on": {
+          "format": "date",
+          "title": "On",
+          "type": "string"
+        },
+        "skipped": {
+          "items": {
+            "$ref": "#/$defs/SkippedRule"
+          },
+          "title": "Skipped",
+          "type": "array"
+        },
+        "sku": {
+          "title": "Sku",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sku",
+        "on",
+        "base_price",
+        "final_price",
+        "cost",
+        "final_margin_pct",
+        "applied",
+        "skipped"
+      ],
+      "title": "PriceExplanation",
+      "type": "object"
+    },
+    "title": "Explain price"
+  },
+  {
+    "_meta": {
+      "contract_version": "1",
+      "risk_class": "read"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Check stock for 1 to 50 SKUs in one call: units on hand, units reserved for\ncustomers' open orders, and units available to sell (on hand minus reserved, never\nbelow zero). Oversold means more units are reserved than are on hand, so some open\norders cannot be fulfilled. A SKU with no stock record reports zeros.",
+    "inputSchema": {
+      "properties": {
+        "skus": {
+          "description": "1 to 50 exact SKUs, e.g. [\"TW-00012\", \"CD-00031\"].",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 50,
+          "minItems": 1,
+          "title": "Skus",
+          "type": "array"
+        }
+      },
+      "required": [
+        "skus"
+      ],
+      "title": "get_inventory_positionArguments",
+      "type": "object"
+    },
+    "name": "get_inventory_position",
+    "outputSchema": {
+      "$defs": {
+        "InventoryPosition": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "title": "Available",
+              "type": "integer"
+            },
+            "on_hand": {
+              "title": "On Hand",
+              "type": "integer"
+            },
+            "oversold": {
+              "title": "Oversold",
+              "type": "boolean"
+            },
+            "reserved": {
+              "title": "Reserved",
+              "type": "integer"
+            },
+            "sku": {
+              "title": "Sku",
+              "type": "string"
+            }
+          },
+          "required": [
+            "sku",
+            "on_hand",
+            "reserved",
+            "available",
+            "oversold"
+          ],
+          "title": "InventoryPosition",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "description": "Wraps the list so the tool returns an object (structured output must be an object).",
+      "properties": {
+        "positions": {
+          "items": {
+            "$ref": "#/$defs/InventoryPosition"
+          },
+          "title": "Positions",
+          "type": "array"
+        }
+      },
+      "required": [
+        "positions"
+      ],
+      "title": "InventoryPositions",
+      "type": "object"
+    },
+    "title": "Get inventory position"
+  },
+  {
+    "_meta": {
+      "contract_version": "1",
+      "risk_class": "read"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Get everything about one product by exact SKU: name, category, status, attributes\n(such as size, colour or scent), base price and cost in GBP, margin %, and stock on\nhand and reserved. The base price is before price rules: use explain_price for the\nprice customers actually pay. Don't know the SKU? Use search_products first.",
+    "inputSchema": {
+      "properties": {
+        "sku": {
+          "description": "Exact SKU, case-sensitive, e.g. TW-00012. Find SKUs with search_products.",
+          "maxLength": 40,
+          "minLength": 3,
+          "title": "Sku",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sku"
+      ],
+      "title": "get_productArguments",
+      "type": "object"
+    },
+    "name": "get_product",
+    "outputSchema": {
+      "$defs": {
+        "PriceRecord": {
+          "additionalProperties": false,
+          "properties": {
+            "base_price": {
+              "anyOf": [
+                {
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                {
+                  "pattern": "^-?\\d+(\\.\\d+)?$",
+                  "type": "string"
+                }
+              ],
+              "title": "Base Price"
+            },
+            "cost": {
+              "anyOf": [
+                {
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                {
+                  "pattern": "^-?\\d+(\\.\\d+)?$",
+                  "type": "string"
+                }
+              ],
+              "title": "Cost"
+            },
+            "currency": {
+              "const": "GBP",
+              "default": "GBP",
+              "title": "Currency",
+              "type": "string"
+            },
+            "sku": {
+              "title": "Sku",
+              "type": "string"
+            }
+          },
+          "required": [
+            "sku",
+            "base_price",
+            "cost"
+          ],
+          "title": "PriceRecord",
+          "type": "object"
+        },
+        "Product": {
+          "additionalProperties": false,
+          "properties": {
+            "attributes": {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "boolean"
+                  }
+                ]
+              },
+              "title": "Attributes",
+              "type": "object"
+            },
+            "category_id": {
+              "title": "Category Id",
+              "type": "string"
+            },
+            "name": {
+              "title": "Name",
+              "type": "string"
+            },
+            "sku": {
+              "title": "Sku",
+              "type": "string"
+            },
+            "status": {
+              "default": "active",
+              "enum": [
+                "active",
+                "disabled"
+              ],
+              "title": "Status",
+              "type": "string"
+            }
+          },
+          "required": [
+            "sku",
+            "name",
+            "category_id"
+          ],
+          "title": "Product",
+          "type": "object"
+        },
+        "StockLevel": {
+          "additionalProperties": false,
+          "properties": {
+            "on_hand": {
+              "minimum": 0,
+              "title": "On Hand",
+              "type": "integer"
+            },
+            "reserved": {
+              "minimum": 0,
+              "title": "Reserved",
+              "type": "integer"
+            },
+            "sku": {
+              "title": "Sku",
+              "type": "string"
+            }
+          },
+          "required": [
+            "sku",
+            "on_hand",
+            "reserved"
+          ],
+          "title": "StockLevel",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "margin_pct": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^-?\\d+(\\.\\d+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Margin Pct"
+        },
+        "price": {
+          "$ref": "#/$defs/PriceRecord"
+        },
+        "product": {
+          "$ref": "#/$defs/Product"
+        },
+        "stock": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StockLevel"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "product",
+        "price",
+        "stock",
+        "margin_pct"
+      ],
+      "title": "ProductDetail",
+      "type": "object"
+    },
+    "title": "Get product"
+  },
+  {
+    "_meta": {
+      "contract_version": "1",
+      "risk_class": "read"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Find products by words in their name or SKU, optionally within a category and a\nmargin % range. Use this first whenever you need SKUs: the other tools need exact\nSKUs. Returns products sorted by SKU with base price and cost in GBP and margin %.\nIf more products match than were returned, narrow the search instead of raising\nthe limit.",
+    "inputSchema": {
+      "properties": {
+        "category_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Only this category and its sub-categories, e.g. C-100 (Bath) or C-110 (Bath towels).",
+          "title": "Category Id"
+        },
+        "include_disabled": {
+          "default": false,
+          "description": "true to include disabled products. Default: active products only.",
+          "title": "Include Disabled",
+          "type": "boolean"
+        },
+        "limit": {
+          "default": 20,
+          "description": "Maximum products to return, 1 to 50.",
+          "maximum": 50,
+          "minimum": 1,
+          "title": "Limit",
+          "type": "integer"
+        },
+        "max_margin_pct": {
+          "anyOf": [
+            {
+              "maximum": 100,
+              "minimum": -1000,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Only products with margin % at or below this.",
+          "title": "Max Margin Pct"
+        },
+        "min_margin_pct": {
+          "anyOf": [
+            {
+              "maximum": 100,
+              "minimum": -1000,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Only products with margin % at or above this.",
+          "title": "Min Margin Pct"
+        },
+        "query": {
+          "default": "",
+          "description": "Words to find in the product name or SKU, e.g. 'sage towel'. Every word must appear. Leave empty to match all products.",
+          "maxLength": 100,
+          "title": "Query",
+          "type": "string"
+        }
+      },
+      "title": "search_productsArguments",
+      "type": "object"
+    },
+    "name": "search_products",
+    "outputSchema": {
+      "$defs": {
+        "ProductSummary": {
+          "additionalProperties": false,
+          "properties": {
+            "base_price": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "pattern": "^-?\\d+(\\.\\d+)?$",
+                  "type": "string"
+                }
+              ],
+              "title": "Base Price"
+            },
+            "category_id": {
+              "title": "Category Id",
+              "type": "string"
+            },
+            "cost": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "pattern": "^-?\\d+(\\.\\d+)?$",
+                  "type": "string"
+                }
+              ],
+              "title": "Cost"
+            },
+            "margin_pct": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "pattern": "^-?\\d+(\\.\\d+)?$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Margin Pct"
+            },
+            "name": {
+              "title": "Name",
+              "type": "string"
+            },
+            "sku": {
+              "title": "Sku",
+              "type": "string"
+            },
+            "status": {
+              "enum": [
+                "active",
+                "disabled"
+              ],
+              "title": "Status",
+              "type": "string"
+            }
+          },
+          "required": [
+            "sku",
+            "name",
+            "category_id",
+            "status",
+            "base_price",
+            "cost",
+            "margin_pct"
+          ],
+          "title": "ProductSummary",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "count": {
+          "title": "Count",
+          "type": "integer"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/ProductSummary"
+          },
+          "title": "Items",
+          "type": "array"
+        },
+        "truncated": {
+          "title": "Truncated",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "items",
+        "count",
+        "truncated"
+      ],
+      "title": "ProductSearchResult",
+      "type": "object"
+    },
+    "title": "Search products"
+  }
+]

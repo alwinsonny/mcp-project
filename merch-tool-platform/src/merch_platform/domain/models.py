@@ -48,6 +48,9 @@ def min_price_for_margin(cost: Decimal, floor_pct: Decimal) -> Decimal:
 # Some MCP clients, including the MCP Inspector, cannot evaluate lookaheads and reject
 # the whole result. We publish one simple, portable pattern instead. Money is always sent
 # as a string like "13.00" or "-18.75", so this pattern fits our data exactly.
+# Note: pydantic 2.14+ publishes no Decimal pattern at all, so after upgrading pydantic
+# this hook does nothing and the catalogue snapshot changes. That is why versions are
+# pinned in requirements.txt: upgrade on purpose, then review `make snapshot`.
 _PYDANTIC_DECIMAL_PREFIX = "^(?!^[-+.]*$)"
 _PORTABLE_DECIMAL_PATTERN = r"^-?\d+(\.\d+)?$"
 
@@ -67,6 +70,17 @@ def _portable_json_schema(schema: dict[str, Any]) -> None:
                 walk(item)
 
     walk(schema)
+
+
+def plain_number(value: Decimal) -> str:
+    """Decimal("10.00") and Decimal("10") both -> "10"; Decimal("12.50") -> "12.5".
+
+    Postgres returns NUMERIC values padded to their column's scale (10.00) while the
+    in-memory store keeps what was typed (10). Text shown to people or models goes
+    through here (or :.2f for money) so both stores produce exactly the same words.
+    """
+    text = f"{value.normalize():f}"
+    return "0" if text == "-0" else text
 
 
 class DomainModel(BaseModel):
@@ -144,11 +158,11 @@ class RuleAction(DomainModel):
     def describe(self) -> str:
         match self.kind:
             case "percent_off":
-                return f"{self.amount}% off"
+                return f"{plain_number(self.amount)}% off"
             case "fixed_off":
-                return f"£{self.amount} off"
+                return f"£{self.amount:.2f} off"
             case "set_price":
-                return f"set to £{self.amount}"
+                return f"set to £{self.amount:.2f}"
 
 
 class PriceRule(DomainModel):

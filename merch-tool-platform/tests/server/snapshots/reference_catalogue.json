@@ -1,0 +1,107 @@
+{
+  "prompts": [
+    {
+      "arguments": [
+        {
+          "description": "Category ID, e.g. C-110 (Bath towels) or C-100 (all of Bath).",
+          "name": "category_id",
+          "required": true
+        },
+        {
+          "description": "Only products with at least this many units available. Default 100.",
+          "name": "min_available",
+          "required": false
+        },
+        {
+          "description": "Largest discount to recommend, 1 to 90 %. Default 30.",
+          "name": "max_discount_pct",
+          "required": false
+        }
+      ],
+      "description": "Find overstocked products in a category and recommend clearance discounts that\nnever sell below cost. Recommendations only.",
+      "name": "clearance_plan",
+      "title": "Clearance plan"
+    },
+    {
+      "arguments": [
+        {
+          "description": "Category ID, e.g. C-110 (Bath towels) or C-100 (all of Bath).",
+          "name": "category_id",
+          "required": true
+        },
+        {
+          "description": "Planned first day, YYYY-MM-DD.",
+          "name": "starts",
+          "required": true
+        },
+        {
+          "description": "Planned last day, YYYY-MM-DD.",
+          "name": "ends",
+          "required": true
+        },
+        {
+          "description": "Would the new promotion be exclusive? true or false. Default false.",
+          "name": "exclusive",
+          "required": false
+        }
+      ],
+      "description": "Check a planned promotion on a category against the promotions already scheduled,\nusing exact overlap facts computed by the server. Advice only.",
+      "name": "promo_conflict_check",
+      "title": "Promotion conflict check"
+    },
+    {
+      "arguments": [
+        {
+          "description": "Category ID, e.g. C-110 (Bath towels) or C-100 (all of Bath).",
+          "name": "category_id",
+          "required": true
+        },
+        {
+          "description": "Target minimum margin %, 0 to 90. Default 15.",
+          "name": "floor_pct",
+          "required": false
+        }
+      ],
+      "description": "Find products in a category whose margin is below a target, and recommend base\nprices that restore it. Recommendations only.",
+      "name": "weekly_margin_review",
+      "title": "Weekly margin review"
+    }
+  ],
+  "resource_templates": [
+    {
+      "_meta": {
+        "contract_version": "1",
+        "risk_class": "read"
+      },
+      "description": "Customer-visible promotions running at any point in a month (month as YYYY-MM, e.g. 2026-12): code, discount %, what they cover, dates, and whether they are exclusive.",
+      "mimeType": "application/json",
+      "name": "promotion_calendar",
+      "title": "Promotions in a month",
+      "uriTemplate": "promotions://calendar/{month}"
+    }
+  ],
+  "resources": [
+    {
+      "_meta": {
+        "contract_version": "1",
+        "risk_class": "read"
+      },
+      "description": "Every product category with its ID, name and sub-categories. Use these IDs as search_products' category_id.",
+      "mimeType": "application/json",
+      "name": "taxonomy",
+      "title": "Category tree",
+      "uri": "catalog://taxonomy"
+    },
+    {
+      "_meta": {
+        "contract_version": "1",
+        "risk_class": "read"
+      },
+      "description": "The catalogue price rules active today, in the order they are applied (lowest priority number first), with what each one does and which products it targets.",
+      "mimeType": "application/json",
+      "name": "active_price_rules",
+      "title": "Price rules in force today",
+      "uri": "pricing://rules/active"
+    }
+  ]
+}

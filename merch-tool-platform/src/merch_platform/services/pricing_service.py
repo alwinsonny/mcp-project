@@ -13,9 +13,9 @@ from merch_platform.domain.commands import (
     WriteLimits,
 )
 from merch_platform.domain.errors import MarginFloorBreached, NoChange, SkuNotFound
-from merch_platform.domain.models import margin_pct, min_price_for_margin
+from merch_platform.domain.models import PriceRule, margin_pct, min_price_for_margin
 from merch_platform.domain.ports import CatalogueRepository, Clock, PricingRepository
-from merch_platform.domain.pricing import explain_price
+from merch_platform.domain.pricing import explain_price, order_rules
 from merch_platform.services.checks import check_blast_radius, preview, require_active, require_skus
 
 
@@ -36,6 +36,11 @@ class PricingService:
             )
         rules = await self._pricing.list_rules()
         return explain_price(products[sku], prices[sku], rules, on or self._clock.today())
+
+    async def rules_in_force(self, on: date | None = None) -> list[PriceRule]:
+        """Price rules active on a date (default today), in the order they are evaluated."""
+        day = on or self._clock.today()
+        return order_rules(r for r in await self._pricing.list_rules() if r.active_on(day))
 
     async def plan_price_change(
         self, request: SetPriceRequest, limits: WriteLimits
